@@ -1,9 +1,9 @@
-import torch
-from torch import nn
-
 from collections import OrderedDict
 from tempfile import TemporaryDirectory
-from transformers import LongformerModel, LongformerConfig, LongformerTokenizerFast
+
+import torch
+from torch import nn
+from transformers import LongformerConfig, LongformerModel, LongformerTokenizerFast
 
 
 def convert_roberta_to_longformer(
@@ -12,13 +12,13 @@ def convert_roberta_to_longformer(
     longformer_max_length: int = 4096,
     attention_window: int = 512,
 ):
-
     ##################################
     # Create new longformer instance #
     ##################################
     longformer_config = LongformerConfig(
         max_position_embeddings=longformer_max_length + 2,
         attention_window=attention_window,
+        type_vocab_size=roberta_model.config.type_vocab_size,
     )
     longformer_model = LongformerModel(longformer_config)
 
@@ -102,6 +102,7 @@ def convert_roberta_to_longformer(
     embedding_parameters2copy = []
 
     for key, item in roberta_embeddings_parameters.items():
+        # if not "position" in key:  # and not "token_type_embeddings" in key:
         if not "position" in key and not "token_type_embeddings" in key:
             embedding_parameters2copy.append((key, item))
 
@@ -138,6 +139,11 @@ def convert_roberta_to_longformer(
     embedding_parameters2copy.append(
         ("position_embeddings.weight", longformer_pos_embs)
     )
+
+    # # add absolute position ids
+    # embedding_parameters2copy.append(
+    #     ("position_ids", torch.arange(longformer_max_length).unsqueeze(0))
+    # )
 
     # Load the embedding weights into the longformer model
     embedding_parameters2copy = OrderedDict(embedding_parameters2copy)
