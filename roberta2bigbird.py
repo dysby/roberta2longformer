@@ -25,8 +25,8 @@ def convert_roberta_to_bigbird(
     Note: In contrast to most other conversion functions, this function copies a model with language modeling head.
     """
     with TemporaryDirectory() as temp_dir:
-        roberta_tokenizer.save_pretrained(temp_dir)
         roberta_tokenizer.model_max_length = bigbird_max_length
+        roberta_tokenizer.save_pretrained(temp_dir)
         bigbird_tokenizer = AutoTokenizer.from_pretrained(temp_dir)
 
     bigbird_config = BigBirdConfig.from_dict(roberta_model.config.to_dict())
