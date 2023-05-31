@@ -69,7 +69,7 @@ def convert_roberta_to_longformer(
         ) = longformer_key.split(".")
         assert layer_class == "attention" or target.endswith(
             "global"
-        ), f"Unexcpected parameters {longformer_key}."
+        ), f"Unexpected parameters {longformer_key}."
         # Copy the normal weights attention weights to the global attention layers too
         roberta_target_key = ".".join(
             [

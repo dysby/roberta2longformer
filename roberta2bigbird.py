@@ -1,16 +1,26 @@
-import torch
-from typing import Tuple
 from collections import OrderedDict
 from tempfile import TemporaryDirectory
-from transformers import RobertaForMaskedLM, RobertaTokenizer
-from transformers import AutoTokenizer
-from transformers import BigBirdConfig, BigBirdForMaskedLM, BigBirdForMaskedLM
+from typing import Tuple
+
+import torch
+from transformers import (
+    AutoTokenizer,
+    BigBirdConfig,
+    BigBirdForMaskedLM,
+    BigBirdModel,
+    BigBirdTokenizerFast,
+    RobertaForMaskedLM,
+    RobertaTokenizer,
+    XLMRobertaModel,
+    XLMRobertaTokenizerFast,
+)
+
 
 def convert_roberta_to_bigbird(
-    roberta_model: RobertaForMaskedLM,
-    roberta_tokenizer: RobertaTokenizer,
-    bigbird_max_length: int = 50176
-) -> Tuple[BigBirdForMaskedLM, BigBirdForMaskedLM]:
+    roberta_model: XLMRobertaModel,
+    roberta_tokenizer: XLMRobertaTokenizerFast,
+    bigbird_max_length: int = 50176,
+) -> Tuple[BigBirdModel, AutoTokenizer]:
     """
     Note: In contrast to most other conversion functions, this function copies a model with language modeling head.
     """
@@ -20,12 +30,17 @@ def convert_roberta_to_bigbird(
         bigbird_tokenizer = AutoTokenizer.from_pretrained(temp_dir)
 
     bigbird_config = BigBirdConfig.from_dict(roberta_model.config.to_dict())
-    bigbird_config.max_position_embeddings =  bigbird_max_length + 2
-    bigbird_model = BigBirdForMaskedLM(bigbird_config)
+    bigbird_config.max_position_embeddings = bigbird_max_length + 2
+    bigbird_model = BigBirdModel(bigbird_config)
 
     # Copy encoder weights
-    #bigbird_model.base_model.encoder.load_state_dict(roberta_model.base_model.encoder.state_dict(), strict=False)
-    bigbird_model.load_state_dict(roberta_model.state_dict(), strict=False)
+    # bigbird_model.base_model.encoder.load_state_dict(roberta_model.base_model.encoder.state_dict(), strict=False)
+    roberta_state_dict = roberta_model.state_dict()
+    roberta_state_dict.pop("embeddings.position_ids")
+    roberta_state_dict["embeddings.position_embeddings.weight"] = torch.rand(
+        bigbird_config.max_position_embeddings, bigbird_config.hidden_size
+    )
+    bigbird_model.load_state_dict(roberta_state_dict, strict=False)
 
     # ------------#
     # Embeddings  #
@@ -81,10 +96,8 @@ def convert_roberta_to_bigbird(
 
     # Load the embedding weights into the longformer model
     embedding_parameters2copy = OrderedDict(embedding_parameters2copy)
-    bigbird_model.base_model.embeddings.load_state_dict(embedding_parameters2copy, strict=False)
-
+    bigbird_model.base_model.embeddings.load_state_dict(
+        embedding_parameters2copy, strict=False
+    )
 
     return bigbird_model, bigbird_tokenizer
-
-
-
