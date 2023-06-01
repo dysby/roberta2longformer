@@ -1,26 +1,32 @@
-import torch
 from collections import OrderedDict
 from tempfile import TemporaryDirectory
-from transformers import RobertaModel, RobertaTokenizer
-from transformers import AutoTokenizer
-from transformers import NystromformerConfig, NystromformerModel
+
+import torch
+from transformers import (
+    AutoTokenizer,
+    NystromformerConfig,
+    NystromformerModel,
+    RobertaModel,
+    RobertaTokenizer,
+)
+
 
 def convert_roberta_to_nystromformer(
-    roberta_model,
-    roberta_tokenizer,
-    nystromformer_max_length: int = 50176
+    roberta_model, roberta_tokenizer, nystromformer_max_length: int = 50176
 ):
     with TemporaryDirectory() as temp_dir:
-        roberta_tokenizer.save_pretrained(temp_dir)
         roberta_tokenizer.model_max_length = nystromformer_max_length
+        roberta_tokenizer.save_pretrained(temp_dir)
         nystromformer_tokenizer = AutoTokenizer.from_pretrained(temp_dir)
 
     nystromformer_config = NystromformerConfig.from_dict(roberta_model.config.to_dict())
-    nystromformer_config.max_position_embeddings =  nystromformer_max_length # - 2 (?)
+    nystromformer_config.max_position_embeddings = nystromformer_max_length  # - 2 (?)
     nystromformer_model = NystromformerModel(nystromformer_config)
 
     # Copy encoder weights
-    nystromformer_model.encoder.load_state_dict(roberta_model.encoder.state_dict(), strict=False)
+    nystromformer_model.encoder.load_state_dict(
+        roberta_model.encoder.state_dict(), strict=False
+    )
 
     # ------------#
     # Embeddings  #
@@ -46,10 +52,10 @@ def convert_roberta_to_nystromformer(
 
     roberta_pos_embs = roberta_model.embeddings.state_dict()[
         "position_embeddings.weight"
-    ][:-2]
+    ][2:]
     roberta_pos_embs_extra = roberta_model.embeddings.state_dict()[
         "position_embeddings.weight"
-    ][-2:]
+    ][:2]
 
     assert (
         roberta_pos_embs.size(0) < nystromformer_max_length
@@ -67,7 +73,7 @@ def convert_roberta_to_nystromformer(
 
     # Add the last extra embeddings.
     longformer_pos_embs = torch.cat(
-        [longformer_pos_embs, roberta_pos_embs_extra], dim=0
+        [roberta_pos_embs_extra, longformer_pos_embs], dim=0
     )
 
     embedding_parameters2copy.append(
@@ -76,9 +82,8 @@ def convert_roberta_to_nystromformer(
 
     # Load the embedding weights into the longformer model
     embedding_parameters2copy = OrderedDict(embedding_parameters2copy)
-    nystromformer_model.embeddings.load_state_dict(embedding_parameters2copy, strict=False)
-
+    nystromformer_model.embeddings.load_state_dict(
+        embedding_parameters2copy, strict=False
+    )
 
     return nystromformer_model, nystromformer_tokenizer
-
-
