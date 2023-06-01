@@ -6,11 +6,8 @@ import torch
 from transformers import (
     AutoTokenizer,
     BigBirdConfig,
-    BigBirdForMaskedLM,
     BigBirdModel,
-    BigBirdTokenizerFast,
-    RobertaForMaskedLM,
-    RobertaTokenizer,
+    PreTrainedTokenizerBase,
     XLMRobertaModel,
     XLMRobertaTokenizerFast,
 )
@@ -20,7 +17,7 @@ def convert_roberta_to_bigbird(
     roberta_model: XLMRobertaModel,
     roberta_tokenizer: XLMRobertaTokenizerFast,
     bigbird_max_length: int = 50176,
-) -> Tuple[BigBirdModel, AutoTokenizer]:
+) -> Tuple[BigBirdModel, PreTrainedTokenizerBase]:
     """
     Note: In contrast to most other conversion functions, this function copies a model with language modeling head.
     """
@@ -63,13 +60,13 @@ def convert_roberta_to_bigbird(
     # 2. Positional embeddings
     # The positional embeddings are repeatedly copied over
     # to longformer to match the new max_seq_length
-
+    # In Roberta Model positions [0, 1] are reserved.
     roberta_pos_embs = roberta_model.base_model.embeddings.state_dict()[
         "position_embeddings.weight"
-    ][:-2]
+    ][2:]
     roberta_pos_embs_extra = roberta_model.base_model.embeddings.state_dict()[
         "position_embeddings.weight"
-    ][-2:]
+    ][:2]
 
     assert (
         roberta_pos_embs.size(0) <= bigbird_max_length
@@ -85,9 +82,9 @@ def convert_roberta_to_bigbird(
         [longformer_pos_embs, roberta_pos_embs[:n_pos_embs_left]], dim=0
     )
 
-    # Add the last extra embeddings.
+    # Add the extra embeddings.
     longformer_pos_embs = torch.cat(
-        [longformer_pos_embs, roberta_pos_embs_extra], dim=0
+        [roberta_pos_embs_extra, longformer_pos_embs], dim=0
     )
 
     embedding_parameters2copy.append(
