@@ -11,6 +11,7 @@ def convert_roberta_to_longformer(
     roberta_tokenizer,
     longformer_max_length: int = 4096,
     attention_window: int = 512,
+    # max_copy_from_index: int = 512,
 ):
     ##################################
     # Create new longformer instance #
@@ -32,10 +33,10 @@ def convert_roberta_to_longformer(
     # longformer tokenizer class with the state of
     # the original tokenizer.
     with TemporaryDirectory() as temp_dir:
+        roberta_tokenizer.model_max_length = longformer_max_length
         roberta_tokenizer.save_pretrained(temp_dir)
         longformer_tokenizer = LongformerTokenizerFast.from_pretrained(temp_dir)
-    longformer_tokenizer.model_max_length = longformer_max_length
-    longformer_tokenizer.init_kwargs["model_max_length"] = longformer_max_length
+    # longformer_tokenizer.init_kwargs["model_max_length"] = longformer_max_length
 
     ######################
     # Copy model weights #
@@ -102,8 +103,8 @@ def convert_roberta_to_longformer(
     embedding_parameters2copy = []
 
     for key, item in roberta_embeddings_parameters.items():
-        # if not "position" in key:  # and not "token_type_embeddings" in key:
-        if not "position" in key and not "token_type_embeddings" in key:
+        if not "position" in key:  # and not "token_type_embeddings" in key:
+            # if not "position" in key and not "token_type_embeddings" in key:
             embedding_parameters2copy.append((key, item))
 
     # 2. Positional embeddings
@@ -112,10 +113,10 @@ def convert_roberta_to_longformer(
 
     roberta_pos_embs = roberta_model.embeddings.state_dict()[
         "position_embeddings.weight"
-    ][:-2]
+    ][2:]
     roberta_pos_embs_extra = roberta_model.embeddings.state_dict()[
         "position_embeddings.weight"
-    ][-2:]
+    ][:2]
 
     assert (
         roberta_pos_embs.size(0) < longformer_max_length
@@ -131,19 +132,14 @@ def convert_roberta_to_longformer(
         [longformer_pos_embs, roberta_pos_embs[:n_pos_embs_left]], dim=0
     )
 
-    # Add the last extra embeddings.
+    # Add the initial extra embeddings (important?, position ids always start from 2 in roberta?).
     longformer_pos_embs = torch.cat(
-        [longformer_pos_embs, roberta_pos_embs_extra], dim=0
+        [roberta_pos_embs_extra, longformer_pos_embs], dim=0
     )
 
     embedding_parameters2copy.append(
         ("position_embeddings.weight", longformer_pos_embs)
     )
-
-    # # add absolute position ids
-    # embedding_parameters2copy.append(
-    #     ("position_ids", torch.arange(longformer_max_length).unsqueeze(0))
-    # )
 
     # Load the embedding weights into the longformer model
     embedding_parameters2copy = OrderedDict(embedding_parameters2copy)
