@@ -20,6 +20,7 @@ def convert_roberta_to_longformer(
         max_position_embeddings=longformer_max_length + 2,
         attention_window=attention_window,
         type_vocab_size=roberta_model.config.type_vocab_size,
+        layer_norm_eps=1e-05,
     )
     longformer_model = LongformerModel(longformer_config)
 
@@ -137,7 +138,9 @@ def convert_roberta_to_longformer(
         [longformer_pos_embs, roberta_pos_embs[:n_pos_embs_left]], dim=0
     )
 
-    # Add the initial extra embeddings (important?, position ids always start from 2 in roberta?).
+    # Add the initial extra embeddings
+    # Longformer transformers implementation always shift the position_ids from 2 as Roberta.
+    # Here we divert from Bigbird and Nystronformer conversion by reserving the first positions embeddings.
     longformer_pos_embs = torch.cat(
         [roberta_pos_embs_extra, longformer_pos_embs], dim=0
     )

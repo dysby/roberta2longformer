@@ -72,6 +72,8 @@ def convert_roberta_to_nystromformer(
     )
 
     # Add the last extra embeddings.
+    # Nystromformer like Bigbird transformers implementation does not shift position_ids,
+    # so we pad the position embeddings at the end.
     longformer_pos_embs = torch.cat(
         [roberta_pos_embs_extra, longformer_pos_embs], dim=0
     )

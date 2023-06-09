@@ -59,7 +59,7 @@ def convert_roberta_to_bigbird(
 
     # 2. Positional embeddings
     # The positional embeddings are repeatedly copied over
-    # to longformer to match the new max_seq_length
+    # to bigbird to match the new max_seq_length
     # In Roberta Model positions [0, 1] are reserved.
     roberta_pos_embs = roberta_model.base_model.embeddings.state_dict()[
         "position_embeddings.weight"
@@ -70,28 +70,26 @@ def convert_roberta_to_bigbird(
 
     assert (
         roberta_pos_embs.size(0) <= bigbird_max_length
-    ), "Longformer sequence length has to be longer than roberta original sequence length"
+    ), "bigbird sequence length has to be longer than roberta original sequence length"
 
     # Figure out how many time we need to copy the original embeddings
     n_copies = round(bigbird_max_length / roberta_pos_embs.size(0))
 
     # Copy the embeddings and handle the last missing ones.
-    longformer_pos_embs = roberta_pos_embs.repeat((n_copies, 1))
-    n_pos_embs_left = bigbird_max_length - longformer_pos_embs.size(0)
-    longformer_pos_embs = torch.cat(
-        [longformer_pos_embs, roberta_pos_embs[:n_pos_embs_left]], dim=0
+    bigbird_pos_embs = roberta_pos_embs.repeat((n_copies, 1))
+    n_pos_embs_left = bigbird_max_length - bigbird_pos_embs.size(0)
+    bigbird_pos_embs = torch.cat(
+        [bigbird_pos_embs, roberta_pos_embs[:n_pos_embs_left]], dim=0
     )
 
     # Add the extra embeddings.
-    longformer_pos_embs = torch.cat(
-        [roberta_pos_embs_extra, longformer_pos_embs], dim=0
-    )
+    # Bigbird transformers implementation does not shift position_ids,
+    # so we pad the position embeddings at the end.
+    bigbird_pos_embs = torch.cat([bigbird_pos_embs, roberta_pos_embs_extra], dim=0)
 
-    embedding_parameters2copy.append(
-        ("position_embeddings.weight", longformer_pos_embs)
-    )
+    embedding_parameters2copy.append(("position_embeddings.weight", bigbird_pos_embs))
 
-    # Load the embedding weights into the longformer model
+    # Load the embedding weights into the bigbird model
     embedding_parameters2copy = OrderedDict(embedding_parameters2copy)
     bigbird_model.base_model.embeddings.load_state_dict(
         embedding_parameters2copy, strict=False
