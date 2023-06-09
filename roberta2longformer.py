@@ -11,7 +11,7 @@ def convert_roberta_to_longformer(
     roberta_tokenizer,
     longformer_max_length: int = 4096,
     attention_window: int = 512,
-    # max_copy_from_index: int = 512,
+    max_copy_from_index: int = 514,
 ):
     ##################################
     # Create new longformer instance #
@@ -109,11 +109,16 @@ def convert_roberta_to_longformer(
 
     # 2. Positional embeddings
     # The positional embeddings are repeatedly copied over
-    # to longformer to match the new max_seq_length
+    # to longformer to match the new `max_seq_length`.
+    # In special models, it may be useful to copy only a part of the
+    # Roberta position embeddings, by setting `max_copy_from_index`.
+    # Because the base model may not be trained to the 514 full positions.
+    # This happens with sentence transformers that were only trained
+    # to sequence length of 128 tokens.
 
     roberta_pos_embs = roberta_model.embeddings.state_dict()[
         "position_embeddings.weight"
-    ][2:]
+    ][2:max_copy_from_index]
     roberta_pos_embs_extra = roberta_model.embeddings.state_dict()[
         "position_embeddings.weight"
     ][:2]
