@@ -12,6 +12,7 @@ def convert_roberta_to_longformer(
     longformer_max_length: int = 4096,
     attention_window: int = 512,
     max_copy_from_index: int = 514,
+    smooth: int = 0,
 ):
     ##################################
     # Create new longformer instance #
@@ -21,6 +22,9 @@ def convert_roberta_to_longformer(
         attention_window=attention_window,
         type_vocab_size=roberta_model.config.type_vocab_size,
         layer_norm_eps=1e-05,
+        # hidden_size=roberta_model.config.hidden_size,
+        # intermediate_size=roberta_model.config.intermediate_size,
+        # vocab_size=roberta_model.config.vocab_size,  # did not work with
     )
     longformer_model = LongformerModel(longformer_config)
 
@@ -138,7 +142,7 @@ def convert_roberta_to_longformer(
         [longformer_pos_embs, roberta_pos_embs[:n_pos_embs_left]], dim=0
     )
 
-    # Add the initial extra embeddings
+    # Add the initial extra embeddings from original roberta model
     # Longformer transformers implementation always shift the position_ids from 2 as Roberta.
     # Here we divert from Bigbird and Nystronformer conversion by reserving the first positions embeddings.
     longformer_pos_embs = torch.cat(
@@ -152,5 +156,11 @@ def convert_roberta_to_longformer(
     # Load the embedding weights into the longformer model
     embedding_parameters2copy = OrderedDict(embedding_parameters2copy)
     longformer_model.embeddings.load_state_dict(embedding_parameters2copy, strict=False)
+
+    # resize_token_embeddings reset padding_idx
+    if getattr(roberta_model.embeddings.word_embeddings, "padding_idx"):
+        longformer_model.embeddings.word_embeddings.padding_idx = (
+            roberta_model.embeddings.word_embeddings.padding_idx
+        )
 
     return longformer_model, longformer_tokenizer
