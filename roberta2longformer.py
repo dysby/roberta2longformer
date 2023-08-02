@@ -8,16 +8,6 @@ from torch import nn
 from transformers import LongformerConfig, LongformerModel, LongformerTokenizerFast
 
 
-def generate_position_encoding_old(seq_len, d, n=10000):
-    P = torch.zeros((seq_len, d))
-    for k in range(seq_len):
-        for i in torch.arange(d // 2):
-            denominator = np.power(n, 2 * i / d)
-            P[k, 2 * i] = np.sin(k / denominator)
-            P[k, 2 * i + 1] = np.cos(k / denominator)
-    return P
-
-
 def generate_position_encoding(seq_len, d, n=10000):
     pos = (
         torch.arange(seq_len).float().unsqueeze(1)
@@ -40,7 +30,7 @@ def convert_roberta_to_longformer(
     longformer_max_length: int = 4096,
     attention_window: int = 512,
     max_copy_from_index: int = 514,
-    smooth: int = 0,
+    generate_new: bool = False,
 ):
     ##################################
     # Create new longformer instance #
@@ -178,8 +168,9 @@ def convert_roberta_to_longformer(
     )
 
     # test generated position encoding
-    p = generate_position_encoding(4098, 768)
-    longformer_pos_embs[max_copy_from_index:, :] = p[max_copy_from_index:, :]
+    if generate_new:
+        p = generate_position_encoding(4098, 768)
+        longformer_pos_embs[max_copy_from_index:, :] = p[max_copy_from_index:, :]
 
     embedding_parameters2copy.append(
         ("position_embeddings.weight", longformer_pos_embs)
