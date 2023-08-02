@@ -1,9 +1,37 @@
 from collections import OrderedDict
 from tempfile import TemporaryDirectory
 
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from torch import nn
 from transformers import LongformerConfig, LongformerModel, LongformerTokenizerFast
+
+
+def generate_position_encoding_old(seq_len, d, n=10000):
+    P = torch.zeros((seq_len, d))
+    for k in range(seq_len):
+        for i in torch.arange(d // 2):
+            denominator = np.power(n, 2 * i / d)
+            P[k, 2 * i] = np.sin(k / denominator)
+            P[k, 2 * i + 1] = np.cos(k / denominator)
+    return P
+
+
+def generate_position_encoding(seq_len, d, n=10000):
+    pos = (
+        torch.arange(seq_len).float().unsqueeze(1)
+    )  # Create positions [0, 1, ..., seq_len-1]
+    div_term = torch.exp(
+        torch.arange(0, d, 2).float() * (-torch.log(torch.tensor(n)).float() / d)
+    )
+
+    # Compute sine and cosine values using broadcasting
+    pos_enc = torch.zeros(seq_len, d)
+    pos_enc[:, 0::2] = torch.sin(pos * div_term)
+    pos_enc[:, 1::2] = torch.cos(pos * div_term)
+
+    return pos_enc
 
 
 def convert_roberta_to_longformer(
@@ -108,7 +136,7 @@ def convert_roberta_to_longformer(
     embedding_parameters2copy = []
 
     for key, item in roberta_embeddings_parameters.items():
-        if not "position" in key:  # and not "token_type_embeddings" in key:
+        if "position" not in key:  # and not "token_type_embeddings" in key:
             # if not "position" in key and not "token_type_embeddings" in key:
             embedding_parameters2copy.append((key, item))
 
@@ -148,6 +176,10 @@ def convert_roberta_to_longformer(
     longformer_pos_embs = torch.cat(
         [roberta_pos_embs_extra, longformer_pos_embs], dim=0
     )
+
+    # test generated position encoding
+    p = generate_position_encoding(4098, 768)
+    longformer_pos_embs[max_copy_from_index:, :] = p[max_copy_from_index:, :]
 
     embedding_parameters2copy.append(
         ("position_embeddings.weight", longformer_pos_embs)
