@@ -24,13 +24,60 @@ def generate_position_encoding(seq_len, d, n=10000):
     return pos_enc
 
 
+def interpolate_vectors(A, B, m):
+    n = len(A)
+    step_size = 1.0 / (m + 1)
+    intermediate_vectors = []
+
+    for i in range(1, m + 1):
+        intermediate_vector = A + (B - A) * i * step_size
+        intermediate_vectors.append(intermediate_vector)
+
+    return np.row_stack(intermediate_vectors)
+
+
+def generate_by_interpolation(absolute_positions):
+    max_position = 4098
+    m = 7
+    # roberta's first position padding
+    new_positional_embeddings = absolute_positions[:1, :]
+    for i in range(2, absolute_positions.shape[0] - 1):
+        mid_points = interpolate_vectors(
+            absolute_positions[i, :], absolute_positions[i + 1, :], m
+        )
+        new_positional_embeddings = np.row_stack(
+            [new_positional_embeddings, absolute_positions[i, :]]
+        )
+        new_positional_embeddings = np.row_stack(
+            [new_positional_embeddings, mid_points]
+        )
+    # add last point
+    new_positional_embeddings = np.row_stack(
+        [new_positional_embeddings, absolute_positions[-1, :]]
+    )
+
+    # add missing positions (m=7)
+    if new_positional_embeddings.shape[0] < max_position:
+        new_positional_embeddings = np.row_stack(
+            [
+                new_positional_embeddings,
+                np.vstack(
+                    [absolute_positions[-1, :]]
+                    * (max_position - new_positional_embeddings.shape[0])
+                ),
+            ]
+        )
+    # return only max_positions (m=8)
+    return torch.Tensor(new_positional_embeddings[:max_position, :])
+
+
 def convert_roberta_to_longformer(
     roberta_model,
     roberta_tokenizer,
     longformer_max_length: int = 4096,
     attention_window: int = 512,
     max_copy_from_index: int = 514,
-    generate_new: bool = False,
+    generate_new_positions: str = "",  # "", "sinosoidal", "interpolate"
 ):
     ##################################
     # Create new longformer instance #
@@ -167,10 +214,20 @@ def convert_roberta_to_longformer(
         [roberta_pos_embs_extra, longformer_pos_embs], dim=0
     )
 
+    # TODO: local test position_embedding_generation
+    # generate_new_positions = "interpolate"
+
     # test generated position encoding
-    if generate_new:
+    if generate_new_positions == "sinosoidal":
         p = generate_position_encoding(4098, 768)
         longformer_pos_embs[max_copy_from_index:, :] = p[max_copy_from_index:, :]
+    elif generate_new_positions == "interpolate":
+        # TODO: restructure if interpolation is used because previous longformer position
+        # embedding computation is not needed.
+        absolute_position_embeddings = roberta_model.embeddings.state_dict()[
+            "position_embeddings.weight"
+        ]
+        longformer_pos_embs = generate_by_interpolation(absolute_position_embeddings)
 
     embedding_parameters2copy.append(
         ("position_embeddings.weight", longformer_pos_embs)
