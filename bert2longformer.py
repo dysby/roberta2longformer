@@ -106,24 +106,25 @@ def convert_bert_to_longformer(
         current_max_pos,
         embed_size,
     ) = bert_model.embeddings.position_embeddings.weight.shape
-    config.max_position_embeddings = longformer_max_length
+
+    config.max_position_embeddings = longformer_max_length + 2
     assert longformer_max_length > current_max_pos
     # allocate a larger position embedding matrix
     new_pos_embed = bert_model.embeddings.position_embeddings.weight.new_empty(
-        longformer_max_length, embed_size
+        longformer_max_length + 2, embed_size
     )
     # print(new_pos_embed.shape)
     # print(bert_model.bert.embeddings.position_embeddings)
     # copy position embeddings over and over to initialize the new position embeddings
-    k = 0
+    k = 2
     step = current_max_pos
-    while k < longformer_max_length - 1:
+    while k < longformer_max_length + 2 - 1:
         new_pos_embed[k : (k + step)] = bert_model.embeddings.position_embeddings.weight
         k += step
 
     bert_model.embeddings.position_ids = torch.tensor(
-        [i for i in range(longformer_max_length)]
-    ).reshape(1, longformer_max_length)
+        [i for i in range(longformer_max_length + 2)]
+    ).reshape(1, longformer_max_length + 2)
 
     bert_model.embeddings.position_embeddings = torch.nn.Embedding.from_pretrained(
         new_pos_embed
@@ -150,6 +151,8 @@ def convert_bert_to_longformer(
     with TemporaryDirectory() as temp_dir:
         bert_model.save_pretrained(temp_dir)
         longformer_model = LongformerModel.from_pretrained(temp_dir)
+
+    # longformer_model.embeddings.position_embeddings.padding_idx = None
 
     return longformer_model, bert_tokenizer  # , new_pos_embed
 
